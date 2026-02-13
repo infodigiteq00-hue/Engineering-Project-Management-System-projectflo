@@ -281,7 +281,7 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
 
         // Check cache first
         const projectKeyPart = projectIds.slice().sort().join('_') || 'none';
-        const cacheKey = `${CACHE_KEYS.COMPANY_HIGHLIGHTS_MILESTONE}_${currentUserRole}_${projectKeyPart}`;
+        const cacheKey = `${CACHE_KEYS.COMPANY_HIGHLIGHTS_MILESTONE}_v2_${currentUserRole}_${projectKeyPart}`;
         
         const cachedData = getCache<any[]>(cacheKey, { ttl: 5 * 60 * 1000 }); // 5 minute cache
         if (cachedData) {
@@ -933,7 +933,7 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
     return filtered;
   }, [documentationUpdates, documentationSearchQuery]);
   
-  // Filter timeline updates by search query
+  // Filter timeline updates by search query, then sort by PO-CDD date (earliest first)
   const filteredTimelineUpdates = useMemo(() => {
     let filtered = timelineUpdates;
     
@@ -943,14 +943,20 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
         const tagNumber = (eq.tag_number || '').toLowerCase();
         const equipmentType = (eq.type || eq.name || '').toLowerCase();
         const projectName = (eq.projects?.name || '').toLowerCase();
+        const equipmentTitle = (eq.manufacturing_serial || '').toLowerCase();
+        const anyPersonalTitle = (eq.any_personal_title || '').toLowerCase();
         
         return tagNumber.includes(query) || 
                equipmentType.includes(query) || 
-               projectName.includes(query);
+               projectName.includes(query) ||
+               equipmentTitle.includes(query) ||
+               anyPersonalTitle.includes(query);
       });
     }
     
-    return filtered;
+    // Sort by PO-CDD date ascending (earliest first); preserve daysToGo order when dates equal
+    const getDate = (eq: any) => (eq.po_cdd && eq.po_cdd !== 'To be scheduled') ? new Date(eq.po_cdd).getTime() : Number.MAX_SAFE_INTEGER;
+    return [...filtered].sort((a: any, b: any) => getDate(a) - getDate(b));
   }, [timelineUpdates, timelineSearchQuery]);
   
   const filteredTimelineUpdatesWithoutDates = useMemo(() => {
@@ -962,17 +968,21 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
         const tagNumber = (eq.tag_number || '').toLowerCase();
         const equipmentType = (eq.type || eq.name || '').toLowerCase();
         const projectName = (eq.projects?.name || '').toLowerCase();
+        const equipmentTitle = (eq.manufacturing_serial || '').toLowerCase();
+        const anyPersonalTitle = (eq.any_personal_title || '').toLowerCase();
         
         return tagNumber.includes(query) || 
                equipmentType.includes(query) || 
-               projectName.includes(query);
+               projectName.includes(query) ||
+               equipmentTitle.includes(query) ||
+               anyPersonalTitle.includes(query);
       });
     }
     
     return filtered;
   }, [timelineUpdatesWithoutDates, timelineSearchQuery]);
   
-  // Filter milestone updates by search query
+  // Filter milestone updates by search query, then sort by milestone date (earliest first)
   const filteredMilestoneUpdates = useMemo(() => {
     let filtered = milestoneUpdates;
     
@@ -983,15 +993,24 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
         const equipmentType = (eq.type || eq.name || '').toLowerCase();
         const projectName = (eq.projects?.name || '').toLowerCase();
         const nextMilestone = (eq.next_milestone || '').toLowerCase();
+        const equipmentTitle = (eq.manufacturing_serial || '').toLowerCase();
+        const anyPersonalTitle = (eq.any_personal_title || '').toLowerCase();
         
         return tagNumber.includes(query) || 
                equipmentType.includes(query) || 
                projectName.includes(query) ||
-               nextMilestone.includes(query);
+               nextMilestone.includes(query) ||
+               equipmentTitle.includes(query) ||
+               anyPersonalTitle.includes(query);
       });
     }
     
-    return filtered;
+    // Sort by milestone date ascending (earliest first); entries without date go last
+    const getDate = (eq: any) => {
+      const d = eq.next_milestone_date || (eq.po_cdd && eq.po_cdd !== 'To be scheduled' ? eq.po_cdd : null);
+      return d ? new Date(d).getTime() : Number.MAX_SAFE_INTEGER;
+    };
+    return [...filtered].sort((a: any, b: any) => getDate(a) - getDate(b));
   }, [milestoneUpdates, milestoneSearchQuery]);
 
   // Fetch documentation updates - only those with status changes (cached metadata)
@@ -2137,7 +2156,6 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                         <div className="h-[280px] xs:h-[320px] sm:h-[360px] md:h-[400px] overflow-y-auto space-y-2 sm:space-y-3 md:space-y-4 pr-1 sm:pr-2 company-highlights-scrollbar">
                           {filteredTimelineUpdates.map((eq: any) => {
                         const daysToGo = eq.daysToGo;
-                        const progress = eq.progress || 0;
                         const isOverdue = daysToGo < 0;
                         const daysDisplay = isOverdue ? Math.abs(daysToGo) : daysToGo;
                         const status = isOverdue 
@@ -2163,7 +2181,7 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                             <div className="flex items-start justify-between mb-2 sm:mb-3">
                               <div className="flex-1 min-w-0 pr-2">
                                 <h3 className="text-xs xs:text-sm sm:text-base md:text-lg font-semibold text-gray-900 mb-0.5 sm:mb-1 truncate">
-                                  {eq.type || eq.name} {eq.tag_number || ''}
+                                  {(([eq.manufacturing_serial, eq.name, eq.any_personal_title].find((v) => v != null && String(v).trim()) ?? '').toString().trim() || `${eq.type || ''} ${eq.tag_number || ''}`.trim())}
                                 </h3>
                                 <p className="text-[10px] xs:text-xs sm:text-sm md:text-base text-gray-600 truncate">
                                   {eq.projects?.name || 'Unknown Project'}
@@ -2178,20 +2196,18 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                                 <div className="text-[9px] xs:text-[10px] sm:text-xs md:text-sm text-gray-500 whitespace-nowrap">
                                   {isOverdue ? 'days overdue' : 'days to go'}
                                 </div>
-                              </div>
-                            </div>
-                            
-                            {/* Progress Bar */}
-                            <div className="mb-1.5 sm:mb-2">
-                              <div className="flex items-center justify-between mb-0.5 sm:mb-1">
-                                <span className="text-[10px] xs:text-xs sm:text-sm text-gray-600">Progress</span>
-                                <span className="text-[10px] xs:text-xs sm:text-sm md:text-base font-medium text-gray-700">{progress}%</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
-                                <div
-                                  className="bg-blue-600 h-1.5 sm:h-2 rounded-full transition-all"
-                                  style={{ width: `${progress}%` }}
-                                />
+                                {eq.po_cdd && eq.po_cdd !== 'To be scheduled' && (
+                                  <div className="text-[8px] xs:text-[9px] sm:text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
+                                    {(() => {
+                                      try {
+                                        const d = new Date(eq.po_cdd);
+                                        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                                      } catch {
+                                        return eq.po_cdd;
+                                      }
+                                    })()}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             
@@ -2225,10 +2241,7 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                         </div>
                       ) : (
                         <div className="h-[280px] xs:h-[320px] sm:h-[360px] md:h-[400px] overflow-y-auto space-y-2 sm:space-y-3 md:space-y-4 pr-1 sm:pr-2 company-highlights-scrollbar">
-                          {filteredTimelineUpdatesWithoutDates.map((eq: any) => {
-                            const progress = eq.progress || 0;
-                            
-                            return (
+                          {filteredTimelineUpdatesWithoutDates.map((eq: any) => (
                               <div
                                 key={eq.id}
                                 onClick={() => {
@@ -2243,7 +2256,7 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                                 <div className="flex items-start justify-between mb-2 sm:mb-3">
                                   <div className="flex-1 min-w-0 pr-2">
                                     <h3 className="text-xs xs:text-sm sm:text-base md:text-lg font-semibold text-gray-900 mb-0.5 sm:mb-1 truncate">
-                                      {eq.type || eq.name} {eq.tag_number || ''}
+                                      {(([eq.manufacturing_serial, eq.name, eq.any_personal_title].find((v) => v != null && String(v).trim()) ?? '').toString().trim() || `${eq.type || ''} ${eq.tag_number || ''}`.trim())}
                                     </h3>
                                     <p className="text-[10px] xs:text-xs sm:text-sm md:text-base text-gray-600 truncate">
                                       {eq.projects?.name || 'Unknown Project'}
@@ -2256,20 +2269,6 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                                   </div>
                                 </div>
                                 
-                                {/* Progress Bar */}
-                                <div className="mb-1.5 sm:mb-2">
-                                  <div className="flex items-center justify-between mb-0.5 sm:mb-1">
-                                    <span className="text-[10px] xs:text-xs sm:text-sm text-gray-600">Progress</span>
-                                    <span className="text-[10px] xs:text-xs sm:text-sm md:text-base font-medium text-gray-700">{progress}%</span>
-                                  </div>
-                                  <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
-                                    <div
-                                      className="bg-blue-600 h-1.5 sm:h-2 rounded-full transition-all"
-                                      style={{ width: `${progress}%` }}
-                                    />
-                                  </div>
-                                </div>
-                                
                                 {/* Status */}
                                 <div className="mt-1.5 sm:mt-2">
                                   <span className="inline-flex items-center px-1.5 xs:px-2 sm:px-2.5 md:px-3 py-0.5 rounded-full text-[9px] xs:text-[10px] sm:text-xs md:text-sm font-medium bg-gray-100 text-gray-800 border border-gray-200">
@@ -2277,8 +2276,7 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                                   </span>
                                 </div>
                               </div>
-                            );
-                          })}
+                          ))}
                         </div>
                       )
                     )}
@@ -2313,6 +2311,28 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                     ) : (
                       <div className="h-[280px] xs:h-[320px] sm:h-[360px] md:h-[400px] overflow-y-auto space-y-2 sm:space-y-3 md:space-y-4 pr-1 sm:pr-2 company-highlights-scrollbar">
                         {filteredMilestoneUpdates.map((eq: any) => {
+                        // Use next_milestone_date if available, otherwise use po_cdd (same data as before, display only changes)
+                        const milestoneDate = eq.next_milestone_date || (eq.po_cdd && eq.po_cdd !== 'To be scheduled' ? eq.po_cdd : null);
+                        const daysToGo = milestoneDate ? (() => {
+                          try {
+                            const d = new Date(milestoneDate);
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            d.setHours(0, 0, 0, 0);
+                            return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                          } catch {
+                            return null;
+                          }
+                        })() : null;
+                        const isOverdue = daysToGo != null && daysToGo < 0;
+                        const daysDisplay = daysToGo != null ? (isOverdue ? Math.abs(daysToGo) : daysToGo) : null;
+                        const formattedDate = milestoneDate ? (() => {
+                          try {
+                            return new Date(milestoneDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                          } catch {
+                            return milestoneDate;
+                          }
+                        })() : null;
                         return (
                           <div
                             key={eq.id}
@@ -2328,7 +2348,7 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                             <div className="flex items-start justify-between mb-2 sm:mb-3">
                               <div className="flex-1 min-w-0 pr-2">
                                 <h3 className="text-xs xs:text-sm sm:text-base md:text-lg font-semibold text-gray-900 mb-0.5 sm:mb-1 truncate">
-                                  {eq.type || eq.name} {eq.tag_number || ''}
+                                  {(([eq.manufacturing_serial, eq.name, eq.any_personal_title].find((v) => v != null && String(v).trim()) ?? '').toString().trim() || `${eq.type || ''} ${eq.tag_number || ''}`.trim())}
                                 </h3>
                                 <p className="text-[10px] xs:text-xs sm:text-sm md:text-base text-gray-600 truncate mb-1 sm:mb-1.5">
                                   {eq.projects?.name || 'Unknown Project'}
@@ -2341,51 +2361,25 @@ const CompanyHighlights = ({ onSelectProject, onMarkAsRead }: CompanyHighlightsP
                                 </div>
                               </div>
                               <div className="text-right flex-shrink-0">
-                                {(() => {
-                                  // Use next_milestone_date if available, otherwise use po_cdd
-                                  const milestoneDate = eq.next_milestone_date || (eq.po_cdd && eq.po_cdd !== 'To be scheduled' ? eq.po_cdd : null);
-                                  return milestoneDate ? (
-                                    <div className="mb-1 sm:mb-2">
-                                      <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500 mb-0.5">Date</div>
-                                      <div className="text-xs xs:text-sm sm:text-base font-semibold text-blue-600">
-                                        {(() => {
-                                          try {
-                                            const date = new Date(milestoneDate);
-                                            // Format as "8 Oct" (day month) to match screenshot
-                                            return date.toLocaleDateString('en-US', { 
-                                              month: 'short', 
-                                              day: 'numeric'
-                                            });
-                                          } catch {
-                                            return milestoneDate;
-                                          }
-                                        })()}
-                                      </div>
+                                {daysDisplay != null ? (
+                                  <>
+                                    <div className={`text-base xs:text-lg sm:text-xl md:text-2xl font-bold mb-0.5 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`}>
+                                      {daysDisplay}
                                     </div>
-                                  ) : null;
-                                })()}
-                                <div className="flex items-center gap-1 text-[9px] xs:text-[10px] sm:text-xs text-gray-500">
-                                  <Clock className="w-3 h-3 xs:w-3.5 xs:h-3.5" />
-                                  <span>Milestone</span>
-                                </div>
+                                    <div className="text-[9px] xs:text-[10px] sm:text-xs md:text-sm text-gray-500 whitespace-nowrap">
+                                      {isOverdue ? 'days overdue' : 'days to go'}
+                                    </div>
+                                    {formattedDate && (
+                                      <div className="text-[8px] xs:text-[9px] sm:text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
+                                        {formattedDate}
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <div className="text-[9px] xs:text-[10px] sm:text-xs text-gray-500">No date set</div>
+                                )}
                               </div>
                             </div>
-                            
-                            {/* Progress Bar */}
-                            {eq.progress !== undefined && (
-                              <div className="mt-2 sm:mt-3">
-                                <div className="flex items-center justify-between mb-0.5 sm:mb-1">
-                                  <span className="text-[10px] xs:text-xs sm:text-sm text-gray-600">Progress</span>
-                                  <span className="text-[10px] xs:text-xs sm:text-sm md:text-base font-medium text-gray-700">{eq.progress || 0}%</span>
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
-                                  <div
-                                    className="bg-blue-600 h-1.5 sm:h-2 rounded-full transition-all"
-                                    style={{ width: `${eq.progress || 0}%` }}
-                                  />
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       })}

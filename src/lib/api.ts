@@ -3148,7 +3148,7 @@ export const fastAPI = {
     try {
       // Fetch all equipment with po_cdd dates (including nulls, we'll filter in component)
       // Include project status to filter out completed projects
-      let url = `/equipment?select=id,tag_number,type,name,progress,po_cdd,next_milestone,next_milestone_date,project_id,projects(id,name,status)&order=po_cdd.asc.nullsfirst`;
+      let url = `/equipment?select=id,tag_number,type,name,manufacturing_serial,any_personal_title,progress,po_cdd,next_milestone,next_milestone_date,project_id,projects(id,name,status)&order=po_cdd.asc.nullsfirst`;
       // Only apply date filters if both are provided (for other use cases)
       // For timeline view, we don't pass dates, so it fetches all equipment
       if (startDate && endDate) {

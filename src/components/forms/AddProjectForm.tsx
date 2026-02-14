@@ -3003,6 +3003,7 @@ Industry: Petrochemical`;
       // Upload Equipment Documents
       // CRITICAL: In edit mode, equipment is already created/updated above, so skip this ENTIRE section
       const equipmentDocuments = [];
+      const equipmentCreationFailures: { tag: string; message: string }[] = [];
       
       // STRICT CHECK: Only process equipment documents for NEW projects
       // In edit mode, equipment is already processed above (line ~1959-2103)
@@ -3031,15 +3032,17 @@ Industry: Petrochemical`;
             progress_phase: 'documentation'
           };
           
-          // console.log(`🆕 NEW PROJECT: Creating equipment: ${equipment.type} - ${equipment.tagNumber}`);
-          const equipmentResponse = await fastAPI.createEquipment(equipmentDataForSupabase);
-          // console.log('✅ Equipment created:', equipmentResponse);
-          
-          // Store equipment with its database ID
-          createdEquipment.push({
-            ...equipment,
-            dbId: equipmentResponse[0].id // Store the actual UUID from database
-          });
+          try {
+            const equipmentResponse = await fastAPI.createEquipment(equipmentDataForSupabase);
+            createdEquipment.push({
+              ...equipment,
+              dbId: equipmentResponse[0].id
+            });
+          } catch (equipmentErr: any) {
+            const msg = equipmentErr?.message || 'Unknown error';
+            console.warn(`⚠️ Skipping equipment (duplicate or invalid): ${equipment.tagNumber || equipment.type}`, equipmentErr);
+            equipmentCreationFailures.push({ tag: equipment.tagNumber || equipment.type || '—', message: msg });
+          }
         }
         
         // Now upload documents using the correct equipment IDs
@@ -3144,7 +3147,6 @@ Industry: Petrochemical`;
         // CRITICAL: This ONLY runs for NEW projects, NOT edit mode
         // In edit mode, equipment is already created/updated above
         if (!isEditMode) {
-          // console.log('🔧 Creating equipment records without documents...');
           for (const equipment of equipmentData) {
             const equipmentDataForSupabase = {
               project_id: createdProject[0].id,
@@ -3157,13 +3159,27 @@ Industry: Petrochemical`;
               progress_phase: 'documentation'
             };
             
-            const equipmentResponse = await fastAPI.createEquipment(equipmentDataForSupabase);
-            // console.log('✅ Equipment created without documents:', equipmentResponse);
+            try {
+              await fastAPI.createEquipment(equipmentDataForSupabase);
+            } catch (equipmentErr: any) {
+              const msg = equipmentErr?.message || 'Unknown error';
+              console.warn(`⚠️ Skipping equipment (duplicate or invalid): ${equipment.tagNumber || equipment.type}`, equipmentErr);
+              equipmentCreationFailures.push({ tag: equipment.tagNumber || equipment.type || '—', message: msg });
+            }
           }
         } else if (isEditMode && editData) {
-          // console.log('✅ Edit mode: Equipment already processed above, skipping equipment creation without documents');
           // DO NOTHING in edit mode - equipment already updated above
         }
+      }
+      
+      if (equipmentCreationFailures.length > 0) {
+        const summary = equipmentCreationFailures.slice(0, 5).map(f => `${f.tag}: ${f.message.split('.')[0]}`).join('; ');
+        const more = equipmentCreationFailures.length > 5 ? ` (and ${equipmentCreationFailures.length - 5} more)` : '';
+        toast({
+          title: 'Project created with some equipment skipped',
+          description: `Duplicate or invalid Tag/Job/Serial: ${summary}${more}. You can add or fix equipment in the project.`,
+          variant: 'destructive'
+        });
       }
       
       // Process document deletions first (in edit mode)

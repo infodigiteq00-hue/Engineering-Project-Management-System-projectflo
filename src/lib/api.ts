@@ -1358,6 +1358,46 @@ export const fastAPI = {
     }
   },
 
+  // Project equipment: merge activities (edit modal) – PATCH existing, POST new, DELETE removed; preserves completions
+  async updateEquipmentActivitiesMerge(equipmentId: string, payload: {
+    commencement_date?: string | null;
+    activities: Array<{ id?: string; sr_no: number; activity_name: string; activity_type: 'regular_update' | 'milestone'; target_relative?: string; target_date?: string; sort_order: number }>;
+  }) {
+    try {
+      if (payload.commencement_date !== undefined) {
+        await api.patch(`/equipment?id=eq.${equipmentId}`, { commencement_date: payload.commencement_date || null });
+      }
+      const currentRes = await api.get(`/equipment_activities?equipment_id=eq.${equipmentId}&select=id`);
+      const current: any[] = Array.isArray(currentRes.data) ? currentRes.data : [];
+      const draftExistingIds = (payload.activities || [])
+        .filter(a => a.id && !String(a.id).startsWith('new-'))
+        .map(a => a.id as string);
+      for (const a of payload.activities || []) {
+        const body = {
+          sr_no: a.sr_no,
+          activity_name: a.activity_name,
+          activity_type: a.activity_type,
+          target_relative: a.target_relative ?? null,
+          target_date: a.target_date ?? null,
+          sort_order: a.sort_order,
+        };
+        if (a.id && !String(a.id).startsWith('new-')) {
+          await api.patch(`/equipment_activities?id=eq.${a.id}`, body);
+        } else {
+          await api.post('/equipment_activities', { equipment_id: equipmentId, ...body }, { headers: { Prefer: 'return=representation' } });
+        }
+      }
+      const toDelete = current.filter((c: any) => !draftExistingIds.includes(c.id)).map((c: any) => c.id);
+      for (const id of toDelete) {
+        await api.delete(`/equipment_activities?id=eq.${id}`);
+      }
+      return await this.getEquipmentActivities(equipmentId);
+    } catch (error) {
+      console.error('❌ Error merging equipment activities:', error);
+      throw error;
+    }
+  },
+
   // Project equipment: mark activity complete (updated_on/updated_by set by backend or sent by caller)
   async createEquipmentActivityCompletion(activityId: string, data: {
     completed_on: string;
@@ -1430,6 +1470,46 @@ export const fastAPI = {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('❌ Error setting standalone equipment activities:', error);
+      throw error;
+    }
+  },
+
+  // Standalone equipment: merge activities (edit modal) – PATCH existing, POST new, DELETE removed; preserves completions
+  async updateStandaloneEquipmentActivitiesMerge(equipmentId: string, payload: {
+    commencement_date?: string | null;
+    activities: Array<{ id?: string; sr_no: number; activity_name: string; activity_type: 'regular_update' | 'milestone'; target_relative?: string; target_date?: string; sort_order: number }>;
+  }) {
+    try {
+      if (payload.commencement_date !== undefined) {
+        await api.patch(`/standalone_equipment?id=eq.${equipmentId}`, { commencement_date: payload.commencement_date || null });
+      }
+      const currentRes = await api.get(`/standalone_equipment_activities?equipment_id=eq.${equipmentId}&select=id`);
+      const current: any[] = Array.isArray(currentRes.data) ? currentRes.data : [];
+      const draftExistingIds = (payload.activities || [])
+        .filter(a => a.id && !String(a.id).startsWith('new-'))
+        .map(a => a.id as string);
+      for (const a of payload.activities || []) {
+        const body = {
+          sr_no: a.sr_no,
+          activity_name: a.activity_name,
+          activity_type: a.activity_type,
+          target_relative: a.target_relative ?? null,
+          target_date: a.target_date ?? null,
+          sort_order: a.sort_order,
+        };
+        if (a.id && !String(a.id).startsWith('new-')) {
+          await api.patch(`/standalone_equipment_activities?id=eq.${a.id}`, body);
+        } else {
+          await api.post('/standalone_equipment_activities', { equipment_id: equipmentId, ...body }, { headers: { Prefer: 'return=representation' } });
+        }
+      }
+      const toDelete = current.filter((c: any) => !draftExistingIds.includes(c.id)).map((c: any) => c.id);
+      for (const id of toDelete) {
+        await api.delete(`/standalone_equipment_activities?id=eq.${id}`);
+      }
+      return await this.getStandaloneEquipmentActivities(equipmentId);
+    } catch (error) {
+      console.error('❌ Error merging standalone equipment activities:', error);
       throw error;
     }
   },

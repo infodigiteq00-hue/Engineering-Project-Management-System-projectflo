@@ -2764,12 +2764,12 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
     }
   }, [toast]);
 
-  // Helper: parse string as explicit date (yyyy-mm-dd or dd-mm-yyyy). Returns yyyy-mm-dd or null so we don't treat "20-02-2026" as "20 days".
+  // Helper: parse string as explicit date (yyyy-mm-dd, dd-mm-yyyy, or dd/mm/yyyy). Returns yyyy-mm-dd or null. If it's a date, use as-is; if week/days/month, compute from commencement.
   const parseExplicitTargetDate = useCallback((val: string | undefined): string | null => {
     if (!val || typeof val !== 'string') return null;
     const t = val.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
-    const ddmmyyyy = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    const ddmmyyyy = t.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
     if (ddmmyyyy) {
       const day = parseInt(ddmmyyyy[1], 10);
       const month = parseInt(ddmmyyyy[2], 10) - 1;
@@ -2845,10 +2845,11 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
       const payload = {
         commencement_date: commencementDate || undefined,
         activities: editActivitiesDraft.map((a, i) => {
-          // Prefer explicit date: if the field looks like a date (yyyy-mm-dd or dd-mm-yyyy), use it as target_date and do not recompute from commencement (avoids "20-02-2026" being treated as 20 days -> e.g. Mar 7).
-          const explicitDate = parseExplicitTargetDate(a.target_relative || a.target_date);
+          // If user entered a date directly (target_date or target_relative), use it as-is. Only compute from commencement when it's week/days/month.
+          const explicitDate = parseExplicitTargetDate(a.target_date) ?? parseExplicitTargetDate(a.target_relative);
           const targetDate = explicitDate ?? (commencementDate && a.target_relative ? computeTargetDate(commencementDate, a.target_relative) : (a.target_date || undefined));
           return {
+            id: a.id,
             sr_no: i + 1,
             activity_name: a.activity_name,
             activity_type: a.activity_type,
@@ -2858,14 +2859,9 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
           };
         }),
       };
-      if (isStandalone) {
-        await fastAPI.setStandaloneEquipmentActivities(editActivitiesModalEquipmentId, payload);
-      } else {
-        await fastAPI.setEquipmentActivities(editActivitiesModalEquipmentId, payload);
-      }
       const refreshed = isStandalone
-        ? await fastAPI.getStandaloneEquipmentActivities(editActivitiesModalEquipmentId)
-        : await fastAPI.getEquipmentActivities(editActivitiesModalEquipmentId);
+        ? await fastAPI.updateStandaloneEquipmentActivitiesMerge(editActivitiesModalEquipmentId, payload)
+        : await fastAPI.updateEquipmentActivitiesMerge(editActivitiesModalEquipmentId, payload);
       setEquipmentActivities(prev => ({ ...prev, [editActivitiesModalEquipmentId]: refreshed }));
       setEditActivitiesModalOpen(false);
       setEditActivitiesModalEquipmentId(null);
@@ -2888,7 +2884,13 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
         toast({ title: 'No data', description: 'No activities to export.', variant: 'destructive' });
         return;
       }
+      const equipment = localEquipment.find(eq => eq.id === equipmentId);
+      const commencementDateRaw = (equipment as any)?.commencementDate ?? (equipment as any)?.commencement_date ?? '';
+      const commencementDateDisplay = commencementDateRaw
+        ? (() => { const d = new Date(commencementDateRaw); const day = String(d.getDate()).padStart(2, '0'); const month = String(d.getMonth() + 1).padStart(2, '0'); const year = d.getFullYear(); return `${day}-${month}-${year}`; })()
+        : 'Not set';
       const XLSX = await import('xlsx-js-style').then((m: any) => m.default);
+      const headerStyle = { fill: { fgColor: { rgb: 'FF2563EB' } }, font: { bold: true, color: { rgb: 'FFFFFFFF' }, sz: 11 } };
       const headers = ['Sr. No.', 'Activity Name', 'Activity Type', 'Target Date', 'Completed On', 'Completed By', 'Notes', 'Updated On', 'Updated By', 'Variance (Days vs Target)'];
       const rows = activities.map((act: any) => {
         const comp = act.completion;
@@ -2907,7 +2909,13 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
         }
         return [act.sr_no, act.activity_name || '', act.activity_type === 'milestone' ? 'Milestone' : 'Process Update', targetDate, completedOn, completedBy, notes, updatedOn, updatedBy, variance];
       });
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const commencementRow = ['Commencement Date', commencementDateDisplay];
+      const ws = XLSX.utils.aoa_to_sheet([commencementRow, headers, ...rows]);
+      const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+      for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 1, c: col });
+        if (ws[cellRef]) ws[cellRef].s = headerStyle;
+      }
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Activities Report');
       XLSX.writeFile(wb, `Activities_Report_${equipmentId.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -2916,7 +2924,7 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
       console.error('Export report error:', err);
       toast({ title: 'Error', description: err?.message || 'Failed to export report.', variant: 'destructive' });
     }
-  }, [projectId, toast]);
+  }, [projectId, localEquipment, toast]);
 
   // Open Mark complete modal
   const openMarkCompleteModal = useCallback((activity: any, equipmentId: string) => {

@@ -21,7 +21,9 @@ import {
   AlertCircle,
   LogOut,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Pause,
+  Play
 } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
 
@@ -38,6 +40,7 @@ interface Company {
   admin_phone?: string;
   admin_whatsapp?: string;
   logo_url?: string | null;
+  services_paused?: boolean;
 }
 
 interface User {
@@ -158,6 +161,7 @@ const SuperAdminDashboard = () => {
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
   const [editingCompanyLogo, setEditingCompanyLogo] = useState<File | null>(null);
   const [editingCompanyLogoPreview, setEditingCompanyLogoPreview] = useState<string | null>(null);
+  const [pausingCompany, setPausingCompany] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -194,7 +198,8 @@ const SuperAdminDashboard = () => {
           admin_email: adminEmail,
           admin_phone: company.admin_phone || '',
           admin_whatsapp: company.admin_whatsapp || '',
-          logo_url: company.logo_url || null
+          logo_url: company.logo_url || null,
+          services_paused: company.services_paused ?? false
         };
       }) || [];
 
@@ -504,6 +509,24 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  const handleToggleServicesPaused = async (company: Company) => {
+    try {
+      setPausingCompany(company.id);
+      const newPaused = !(company.services_paused ?? false);
+      await fastAPI.updateCompany(company.id, { services_paused: newPaused });
+      await fetchData();
+      toast({
+        title: newPaused ? 'Services paused' : 'Services resumed',
+        description: newPaused ? `All users of ${company.name} are now blocked from actions.` : `Users of ${company.name} can use the dashboard again.`,
+        duration: 3000
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to update services pause: ' + (error as Error).message, variant: 'destructive' });
+    } finally {
+      setPausingCompany(null);
+    }
+  };
+
   const getPlanBadgeColor = (plan: string) => {
     switch (plan) {
       case 'premium':
@@ -696,6 +719,20 @@ const SuperAdminDashboard = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={() => handleToggleServicesPaused(company)}
+                        className="p-1 hover:bg-white/20 rounded transition-colors"
+                        disabled={updatingCompany || deletingCompany}
+                        title={company.services_paused ? 'Resume services' : 'Pause services'}
+                      >
+                        {pausingCompany === company.id ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : company.services_paused ? (
+                          <Play className="w-4 h-4" />
+                        ) : (
+                          <Pause className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
                         onClick={() => handleEditCompany(company)}
                         className="p-1 hover:bg-white/20 rounded transition-colors"
                         disabled={updatingCompany || deletingCompany}
@@ -736,6 +773,13 @@ const SuperAdminDashboard = () => {
                       <span className="text-sm text-gray-600">Status:</span>
                       <Badge className={getStatusBadgeColor(company.is_active)}>
                         {company.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">Services:</span>
+                      <Badge className={(company.services_paused ?? false) ? 'bg-amber-100 text-amber-800' : 'bg-green-100 text-green-800'}>
+                        {(company.services_paused ?? false) ? 'Paused' : 'Active'}
                       </Badge>
                     </div>
 

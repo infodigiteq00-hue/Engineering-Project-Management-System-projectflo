@@ -148,6 +148,9 @@ const Index = () => {
     completionCertificates: number;
   } | null>(null);
 
+  // Services paused by super admin - blocks all user actions
+  const [servicesPaused, setServicesPaused] = useState(false);
+
   // Initialize cache cleanup on app startup
   useEffect(() => {
     initializeCacheCleanup();
@@ -269,6 +272,11 @@ const Index = () => {
               } else {
                 localStorage.removeItem('companyLogo');
               }
+              // Super admin is not blocked; other roles see blocking modal when services are paused
+              const role = authUserRole || localStorage.getItem('userRole');
+              if (role !== 'super_admin') {
+                setServicesPaused(firmData.services_paused ?? false);
+              }
             }
           } catch (error) {
             console.error('❌ Error fetching firm data:', error);
@@ -288,6 +296,48 @@ const Index = () => {
 
     loadUserData();
   }, [authLoading, authUserName, authUserRole, authFirmId]);
+
+  // Keep services_paused in sync so super admin pause applies to already-logged-in users (realtime + poll)
+  useEffect(() => {
+    const firmId = authFirmId || JSON.parse(localStorage.getItem('userData') || '{}').firm_id || localStorage.getItem('firmId');
+    const role = authUserRole || localStorage.getItem('userRole');
+    if (!firmId || role === 'super_admin') return;
+
+    const applyPaused = (value: boolean) => setServicesPaused(value);
+
+    // Realtime: apply pause as soon as firm row is updated (if Realtime is enabled for firms)
+    const channel = supabase
+      .channel(`firm-services-${firmId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'firms', filter: `id=eq.${firmId}` },
+        (payload: { new?: { services_paused?: boolean } }) => {
+          if (payload.new && typeof payload.new.services_paused === 'boolean') {
+            applyPaused(payload.new.services_paused);
+          }
+        }
+      )
+      .subscribe();
+
+    // Poll as fallback (e.g. if Realtime not enabled for firms table)
+    const checkServicesPaused = async () => {
+      try {
+        const firmData = await fastAPI.getFirmById(firmId);
+        if (firmData && typeof firmData.services_paused === 'boolean') {
+          applyPaused(firmData.services_paused);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    const intervalId = setInterval(checkServicesPaused, 5000);
+    checkServicesPaused();
+
+    return () => {
+      clearInterval(intervalId);
+      supabase.removeChannel(channel);
+    };
+  }, [authFirmId, authUserRole]);
 
   // Fetch projects from Supabase on component mount
   // Wait for AuthContext to finish loading, but use localStorage if available
@@ -2052,6 +2102,22 @@ Note: Please download the Recommendation Letter template using the link above, f
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Blocking modal when super admin has paused company services */}
+      {servicesPaused && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" aria-modal="true" role="dialog">
+          <div className="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4 text-center">
+            <p className="text-lg font-medium text-gray-900">Your services are temporarily paused.</p>
+            <p className="mt-4 text-sm font-medium text-gray-700">Contact administrator</p>
+            <p className="mt-2 text-sm text-gray-700">
+              Email: <a href="mailto:info@digiteqsolution.com" className="text-blue-600 hover:underline">info@digiteqsolution.com</a>
+            </p>
+            <p className="mt-1 text-sm text-gray-700">
+              Contact number: <a href="tel:9067610118" className="text-blue-600 hover:underline">9067610118</a>
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
         <ProjectHeader loading={loading} userName={userName} userRole={userRole} firmName={firmName} firmLogo={firmLogo} />
 

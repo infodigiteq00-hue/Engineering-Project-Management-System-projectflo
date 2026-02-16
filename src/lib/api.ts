@@ -3893,6 +3893,19 @@ export const fastAPI = {
     invited_by: string;
   }) {
     try {
+      // Enforce max users limit (firm admin + members count toward the limit)
+      if (inviteData.firm_id) {
+        const [firm, firmUsers] = await Promise.all([
+          fastAPI.getFirmById(inviteData.firm_id),
+          fastAPI.getTeamMembersByFirm(inviteData.firm_id)
+        ]);
+        const maxUsers = firm?.max_users ?? 5;
+        const currentCount = Array.isArray(firmUsers) ? firmUsers.length : 0;
+        if (currentCount >= maxUsers) {
+          throw new Error(`Maximum user limit (${maxUsers}) reached for this company.`);
+        }
+      }
+
       // Same email allowed multiple times only with the same role; block if email exists with a different role
       const normalizedEmail = (inviteData.email || '').toLowerCase().trim();
       const newRole = (inviteData.role || '').trim();

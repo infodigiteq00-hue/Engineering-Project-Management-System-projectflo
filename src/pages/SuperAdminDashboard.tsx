@@ -789,7 +789,7 @@ const SuperAdminDashboard = () => {
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Created:</span>
+                      <span className="text-sm text-gray-600">Onboarded on:</span>
                       <span className="text-sm text-gray-900">{formatDate(company.created_at)}</span>
                     </div>
                   </div>

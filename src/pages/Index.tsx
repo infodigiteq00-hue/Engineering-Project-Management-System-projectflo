@@ -632,7 +632,7 @@ const Index = () => {
           setEquipmentLock({ isLocked: false, daysRemaining: 0, totalDays: 0 });
           return;
         }
-        const totalDays = Math.max(1, Number(unlockDays) || 90);
+        const totalDays = typeof unlockDays === 'number' ? Math.max(0, unlockDays) : 90;
         const created = new Date(createdAt);
         const unlockDate = new Date(created);
         unlockDate.setDate(unlockDate.getDate() + totalDays);

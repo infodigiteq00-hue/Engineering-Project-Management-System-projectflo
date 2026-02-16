@@ -957,10 +957,14 @@ const SuperAdminDashboard = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Equipment dashboard unlock (days)</label>
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   max={365}
                   value={newCompany.equipment_unlock_days}
-                  onChange={(e) => setNewCompany(prev => ({ ...prev, equipment_unlock_days: Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 90)) }))}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    const num = isNaN(v) ? 90 : Math.max(0, Math.min(365, v));
+                    setNewCompany(prev => ({ ...prev, equipment_unlock_days: num }));
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g. 60 or 90"
                 />
@@ -1172,10 +1176,14 @@ const SuperAdminDashboard = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Equipment dashboard unlock (days)</label>
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   max={365}
                   value={editingCompany.equipment_unlock_days ?? 90}
-                  onChange={(e) => setEditingCompany(prev => prev ? { ...prev, equipment_unlock_days: Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 90)) } : null)}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    const num = isNaN(v) ? 90 : Math.max(0, Math.min(365, v));
+                    setEditingCompany(prev => prev ? { ...prev, equipment_unlock_days: num } : null);
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g. 60 or 90"
                 />

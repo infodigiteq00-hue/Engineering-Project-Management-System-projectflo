@@ -58,6 +58,8 @@ interface CompletionCertificatesTabProps {
   certificateTemplates: CertificateTemplate[];
   equipmentCarouselIndex: Record<string, number>;
   userRole: string;
+  equipmentLock?: { isLocked: boolean; daysRemaining: number; totalDays: number } | null;
+  onShowEquipmentLockModal?: () => void;
   onDownloadTemplate: (template: CertificateTemplate) => void;
   onSelectProject: (projectId: string, tab: string) => void;
   onEditProject: (projectId: string) => void;
@@ -74,6 +76,8 @@ const CompletionCertificatesTab = ({
   certificateTemplates,
   equipmentCarouselIndex,
   userRole,
+  equipmentLock,
+  onShowEquipmentLockModal,
   onDownloadTemplate,
   onSelectProject,
   onEditProject,
@@ -905,9 +909,17 @@ const CompletionCertificatesTab = ({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
+                          if (equipmentLock?.isLocked && onShowEquipmentLockModal) {
+                            onShowEquipmentLockModal();
+                            return;
+                          }
                           onSelectProject(project.id, "equipment");
                         }}
-                        className="w-full sm:flex-1 h-8 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-sm whitespace-nowrap justify-center bg-white hover:bg-blue-50 border-gray-300 text-gray-700 hover:text-blue-700 hover:border-blue-300 font-medium transition-all duration-200"
+                        className={`w-full sm:flex-1 h-8 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-sm whitespace-nowrap justify-center font-medium transition-all duration-200 ${
+                          equipmentLock?.isLocked
+                            ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-80'
+                            : 'bg-white hover:bg-blue-50 border-gray-300 text-gray-700 hover:text-blue-700 hover:border-blue-300'
+                        }`}
                       >
                         <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />

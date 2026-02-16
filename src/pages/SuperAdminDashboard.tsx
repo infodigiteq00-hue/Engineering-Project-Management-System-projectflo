@@ -41,6 +41,7 @@ interface Company {
   admin_whatsapp?: string;
   logo_url?: string | null;
   services_paused?: boolean;
+  equipment_unlock_days?: number | null;
 }
 
 interface User {
@@ -154,7 +155,8 @@ const SuperAdminDashboard = () => {
     admin_name: '',
     admin_email: '',
     admin_phone: '',
-    admin_whatsapp: ''
+    admin_whatsapp: '',
+    equipment_unlock_days: 90
   });
   const [newCompanyLogo, setNewCompanyLogo] = useState<File | null>(null);
   const [newCompanyLogoPreview, setNewCompanyLogoPreview] = useState<string | null>(null);
@@ -199,7 +201,8 @@ const SuperAdminDashboard = () => {
           admin_phone: company.admin_phone || '',
           admin_whatsapp: company.admin_whatsapp || '',
           logo_url: company.logo_url || null,
-          services_paused: company.services_paused ?? false
+          services_paused: company.services_paused ?? false,
+          equipment_unlock_days: company.equipment_unlock_days ?? 90
         };
       }) || [];
 
@@ -226,7 +229,8 @@ const SuperAdminDashboard = () => {
         admin_name: newCompany.admin_name,
         admin_email: newCompany.admin_email,
         admin_phone: newCompany.admin_phone,
-        admin_whatsapp: newCompany.admin_whatsapp
+        admin_whatsapp: newCompany.admin_whatsapp,
+        equipment_unlock_days: newCompany.equipment_unlock_days ?? 90
       });
 
       // // console.log('✅ Company created:', companyData);
@@ -335,7 +339,8 @@ const SuperAdminDashboard = () => {
         admin_name: '',
         admin_email: '',
         admin_phone: '',
-        admin_whatsapp: ''
+        admin_whatsapp: '',
+        equipment_unlock_days: 90
       });
       setNewCompanyLogo(null);
       setNewCompanyLogoPreview(null);
@@ -420,6 +425,7 @@ const SuperAdminDashboard = () => {
         admin_phone: editingCompany.admin_phone,
         admin_whatsapp: editingCompany.admin_whatsapp,
         logo_url: logoUrl,
+        equipment_unlock_days: editingCompany.equipment_unlock_days ?? 90,
         updated_at: new Date().toISOString()
       };
       
@@ -947,6 +953,20 @@ const SuperAdminDashboard = () => {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Equipment dashboard unlock (days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={newCompany.equipment_unlock_days}
+                  onChange={(e) => setNewCompany(prev => ({ ...prev, equipment_unlock_days: Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 90)) }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. 60 or 90"
+                />
+                <p className="text-xs text-gray-500 mt-1">Equipment tab stays locked for this many days after onboarding so users get used to the app step by step.</p>
+              </div>
+
               {/* Company Logo Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Company Logo (Optional)</label>
@@ -1146,6 +1166,20 @@ const SuperAdminDashboard = () => {
                   onChange={(e) => setEditingCompany(prev => prev ? { ...prev, admin_whatsapp: e.target.value } : null)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Equipment dashboard unlock (days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={editingCompany.equipment_unlock_days ?? 90}
+                  onChange={(e) => setEditingCompany(prev => prev ? { ...prev, equipment_unlock_days: Math.max(1, Math.min(365, parseInt(e.target.value, 10) || 90)) } : null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. 60 or 90"
+                />
+                <p className="text-xs text-gray-500 mt-1">Equipment tab stays locked for this many days after onboarding.</p>
               </div>
 
               {/* Company Logo Upload */}

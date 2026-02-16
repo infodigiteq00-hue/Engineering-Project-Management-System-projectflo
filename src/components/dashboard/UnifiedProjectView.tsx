@@ -21,6 +21,7 @@ interface UnifiedProjectViewProps {
   projectData: any;
   initialTab?: string;
   userRole?: string;
+  equipmentLock?: { isLocked: boolean; daysRemaining: number; totalDays: number } | null;
   onEditProject?: (projectId: string) => void;
   onDeleteProject?: (projectId: string) => void;
   onCompleteProject?: (projectId: string) => void;
@@ -36,6 +37,7 @@ const UnifiedProjectView = ({
   projectData,
   initialTab = "equipment",
   userRole = "",
+  equipmentLock = null,
   onEditProject,
   onDeleteProject,
   onCompleteProject,
@@ -44,7 +46,14 @@ const UnifiedProjectView = ({
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(
-    initialTab);
+    (equipmentLock?.isLocked && initialTab === "equipment") ? "vdcr" : initialTab);
+
+  // When equipment is locked and user landed on equipment tab, keep them on vdcr
+  useEffect(() => {
+    if (equipmentLock?.isLocked && activeTab === "equipment") {
+      setActiveTab("vdcr");
+    }
+  }, [equipmentLock?.isLocked]);
 
   // Listen for navigation events from child components
   useEffect(() => {
@@ -1230,8 +1239,9 @@ const UnifiedProjectView = ({
           <div className="w-full overflow-x-auto overflow-y-hidden xl:overflow-x-visible xl:overflow-y-visible mb-16 scroll-smooth p-1 scrollbar-hide">
             <TabsList className={`flex xl:grid flex-nowrap min-w-max xl:min-w-0 xl:w-full bg-transparent rounded-2xl p-2 gap-2 ${(userRole === 'vdcr_manager' || userRole === 'editor') ? 'xl:grid-cols-4' : userRole === 'viewer' ? 'xl:grid-cols-5' : 'xl:grid-cols-6'}`}>
             <TabsTrigger 
-              value="equipment" 
-              className="flex items-center justify-center gap-2 sm:gap-3 px-2 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-semibold bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:scale-105 transition-all duration-300 rounded-xl hover:bg-gray-200 data-[state=active]:hover:from-blue-600 data-[state=active]:hover:to-blue-700 flex-shrink-0"
+              value="equipment"
+              disabled={equipmentLock?.isLocked}
+              className="flex items-center justify-center gap-2 sm:gap-3 px-2 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-semibold bg-white data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:scale-105 transition-all duration-300 rounded-xl hover:bg-gray-200 data-[state=active]:hover:from-blue-600 data-[state=active]:hover:to-blue-700 flex-shrink-0 disabled:opacity-60 disabled:pointer-events-none disabled:cursor-not-allowed"
             >
               <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center data-[state=active]:bg-white/20 data-[state=active]:text-white">
                 <Building size={20} className="text-blue-600 data-[state=active]:text-white" />

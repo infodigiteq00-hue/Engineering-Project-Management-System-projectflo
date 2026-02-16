@@ -607,6 +607,53 @@ const Index = () => {
   // Store the previous tab before navigating to project view (for back navigation)
   const [previousTab, setPreviousTab] = useState<'projects' | 'equipment' | 'tasks' | 'certificates' | null>(null);
 
+  // Equipment onboarding lock: firm's Equipment tab is locked for N days after creation (set by super admin)
+  const [equipmentLock, setEquipmentLock] = useState<{ isLocked: boolean; daysRemaining: number; totalDays: number } | null>(null);
+  const [equipmentLockModalOpen, setEquipmentLockModalOpen] = useState(false);
+
+  // Fetch firm and compute equipment lock status (unlock after equipment_unlock_days from created_at)
+  useEffect(() => {
+    // Testing: force lock so you can see greyed buttons without a new firm. In console: localStorage.setItem('epms_force_equipment_lock', '1'); then refresh. Remove with localStorage.removeItem('epms_force_equipment_lock')
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('epms_force_equipment_lock') === '1') {
+      setEquipmentLock({ isLocked: true, daysRemaining: 30, totalDays: 90 });
+      return;
+    }
+    if (!authFirmId || authLoading) return;
+    const compute = async () => {
+      try {
+        const firm = await fastAPI.getFirmById(authFirmId);
+        if (!firm) {
+          setEquipmentLock({ isLocked: false, daysRemaining: 0, totalDays: 0 });
+          return;
+        }
+        const createdAt = firm.created_at;
+        const unlockDays = firm.equipment_unlock_days;
+        if (createdAt == null || createdAt === undefined) {
+          setEquipmentLock({ isLocked: false, daysRemaining: 0, totalDays: 0 });
+          return;
+        }
+        const totalDays = Math.max(1, Number(unlockDays) || 90);
+        const created = new Date(createdAt);
+        const unlockDate = new Date(created);
+        unlockDate.setDate(unlockDate.getDate() + totalDays);
+        const now = new Date();
+        const isLocked = now < unlockDate;
+        const daysRemaining = isLocked ? Math.max(1, Math.ceil((unlockDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))) : 0;
+        setEquipmentLock({ isLocked, daysRemaining, totalDays });
+      } catch {
+        setEquipmentLock({ isLocked: false, daysRemaining: 0, totalDays: 0 });
+      }
+    };
+    compute();
+  }, [authFirmId, authLoading]);
+
+  // When equipment is locked and user is on Standalone Equipment tab, switch them to projects
+  useEffect(() => {
+    if (equipmentLock?.isLocked && mainTab === 'equipment') {
+      setMainTab('projects');
+    }
+  }, [equipmentLock?.isLocked, mainTab]);
+
   // Fetch standalone equipment when equipment tab is active
   // Cache first 24 equipments (first 3 pages) and preserve cache on refresh
   useEffect(() => {
@@ -2149,9 +2196,18 @@ Note: Please download the Recommendation Letter template using the link above, f
                 </div>
               </button>
               <button
-                onClick={() => { markAsSeen('standalone_equipment'); setMainTab('equipment'); }}
+                onClick={() => {
+                  if (equipmentLock?.isLocked) {
+                    setEquipmentLockModalOpen(true);
+                    return;
+                  }
+                  markAsSeen('standalone_equipment');
+                  setMainTab('equipment');
+                }}
                 className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors flex-shrink-0 ${
-                  mainTab === 'equipment'
+                  equipmentLock?.isLocked
+                    ? 'border-transparent text-gray-400 cursor-not-allowed opacity-70'
+                    : mainTab === 'equipment'
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
@@ -2935,9 +2991,17 @@ Note: Please download the Recommendation Letter template using the link above, f
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (equipmentLock?.isLocked) {
+                                setEquipmentLockModalOpen(true);
+                                return;
+                              }
                               handleSelectProject(project.id, "equipment");
                             }}
-                            className="w-full sm:flex-1 h-8 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-sm whitespace-nowrap justify-center bg-white hover:bg-blue-50 border-gray-300 text-gray-700 hover:text-blue-700 hover:border-blue-300 font-medium transition-all duration-200"
+                            className={`w-full sm:flex-1 h-8 sm:h-8 px-2 sm:px-3 text-[11px] sm:text-sm whitespace-nowrap justify-center font-medium transition-all duration-200 ${
+                              equipmentLock?.isLocked
+                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-80'
+                                : 'bg-white hover:bg-blue-50 border-gray-300 text-gray-700 hover:text-blue-700 hover:border-blue-300'
+                            }`}
                           >
                             <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -3054,6 +3118,8 @@ Note: Please download the Recommendation Letter template using the link above, f
             certificateTemplates={certificateTemplates}
             equipmentCarouselIndex={equipmentCarouselIndex}
             userRole={userRole}
+            equipmentLock={equipmentLock}
+            onShowEquipmentLockModal={() => setEquipmentLockModalOpen(true)}
             onDownloadTemplate={handleDownloadTemplate}
             onSelectProject={handleSelectProject}
             onEditProject={handleEditProject}
@@ -3077,6 +3143,7 @@ Note: Please download the Recommendation Letter template using the link above, f
             projectData={selectedProjectData || mockProjects[0]}
             initialTab={selectedProjectTab}
             userRole={userRole}
+            equipmentLock={equipmentLock}
             onEditProject={handleEditProject}
             onDeleteProject={handleDeleteProject}
             onCompleteProject={handleCompleteProject}
@@ -3111,6 +3178,36 @@ Note: Please download the Recommendation Letter template using the link above, f
           editData={editMode ? editingProject : null}
           isEditMode={editMode}
         />
+      )}
+
+      {/* Equipment onboarding lock modal */}
+      {equipmentLockModalOpen && equipmentLock?.isLocked && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setEquipmentLockModalOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 text-blue-600">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900">Equipment available soon</h3>
+            </div>
+            <p className="text-gray-700">
+              <strong className="text-blue-600">{equipmentLock.daysRemaining} day{equipmentLock.daysRemaining !== 1 ? 's' : ''} to go</strong> until the Equipment dashboard is unlocked.
+            </p>
+            <p className="text-sm text-gray-600">
+              To help you and your team get accustomed to the app faster and avoid confusion, we prefer going step by step. We had set a timer of <strong>{equipmentLock.totalDays} days</strong> since your onboarding—only <strong>{equipmentLock.daysRemaining} days to go</strong>. Enjoy exploring the rest of the platform in the meantime!
+            </p>
+            <p className="text-xs text-gray-500 border-t border-gray-100 pt-3">
+              For any emergency, please contact your company admin or our support team.
+            </p>
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => setEquipmentLockModalOpen(false)} className="bg-blue-600 hover:bg-blue-700">
+                Got it
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* PDF Viewer Modal */}

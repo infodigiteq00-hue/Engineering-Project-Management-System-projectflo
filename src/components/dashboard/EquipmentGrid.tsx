@@ -2963,6 +2963,7 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
       }
       const isStandalone = projectId === 'standalone';
       const currentUserId = user?.id || localStorage.getItem('userId') || null;
+      const currentUserFullName = localStorage.getItem('userName') || (user as any)?.full_name || user?.email || null;
       if (isStandalone) {
         await fastAPI.createStandaloneEquipmentActivityCompletion(activityId, {
           completed_on: completedOn,
@@ -3019,7 +3020,7 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
             equipment_id: equipmentId,
             image_url: imageUrl || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjwvc3ZnPg==',
             description: descText,
-            uploaded_by: completedByDisplayName || currentUserId || undefined,
+            uploaded_by: currentUserFullName || completedByDisplayName || currentUserId || undefined,
           };
           if (isStandalone) {
             await fastAPI.createStandaloneProgressImage(imageData);
@@ -11333,9 +11334,8 @@ const EquipmentGrid = ({ equipment, projectName, projectId, onBack, onViewDetail
                   <strong>Uploaded by:</strong> {(() => {
                     const currentEquipment = localEquipment.find(eq => eq.id === showImagePreview.equipmentId);
                     const metadata = currentEquipment?.progressImagesMetadata || [];
-                    const currentMetadata = metadata[showImagePreview.currentIndex];
-
-                    return currentMetadata?.uploaded_by || "Team Member";
+                    const currentMetadata = metadata[showImagePreview.currentIndex] as { created_by_user?: { full_name?: string }; uploaded_by?: string } | undefined;
+                    return currentMetadata?.created_by_user?.full_name || currentMetadata?.uploaded_by || "Team Member";
                   })()}
                 </div>
                 <div className="text-sm text-gray-600">
